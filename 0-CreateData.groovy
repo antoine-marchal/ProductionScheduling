@@ -9,14 +9,16 @@
  */
 
 // Import des librairies SQL
+/**
 @Grapes([   
     @Grab(group='org.xerial', module='sqlite-jdbc', version='3.7.2'),
     @GrabConfig(systemClassLoader=true)
 ])
+ */
 import groovy.sql.Sql
 import java.text.SimpleDateFormat
 import java.util.Date
-
+import org.sqlite.JDBC
 /**
  * 1 ere etape, creer les tables
  */
@@ -54,7 +56,7 @@ parts.commit()
  * A1
  * - M1 2
  * - A2 1
- * - - M2 3
+ * - - M2 1
  * A3
  * - M1 1
  * - A4 2
@@ -64,7 +66,7 @@ parts.commit()
 def plans = sql.dataSet("PLAN")
 plans.add(part_number:'A1',leadtime:10, component_part_number:'M1',component_part_quantity: 2)
 plans.add(part_number:'A1',leadtime:10, component_part_number:'A2',component_part_quantity: 1)
-plans.add(part_number:'A2',leadtime:5, component_part_number:'M2',component_part_quantity: 3)
+plans.add(part_number:'A2',leadtime:5, component_part_number:'M2',component_part_quantity: 1)
 plans.add(part_number:'A3',leadtime:5, component_part_number:'M1',component_part_quantity: 1)
 plans.add(part_number:'A3',leadtime:5, component_part_number:'A4',component_part_quantity: 2)
 plans.add(part_number:'A4',leadtime:10, component_part_number:'M1',component_part_quantity: 1)
@@ -79,7 +81,7 @@ plans.commit()
 def wks = sql.dataSet("WORKCENTER")
 wks.add(workcenter:'INSTALL_WC1',capacity: 8,setupTime :2)
 wks.add(workcenter:'INSTALL_WC2',capacity: 12,setupTime :3)
-wks.add(workcenter:'MAKE_WC1',capacity: 4,setupTime :1)
+wks.add(workcenter:'MAKE_WC1',capacity: 15,setupTime :2)
 wks.commit()
 
 
@@ -151,6 +153,7 @@ def addOperation(Sql sql,String pn,int qte,String ddate){
     def ldt = 0
     sql.eachRow("SELECT * FROM PLAN WHERE part_number='$pn'".toString()){ r->
         ldt = r.leadtime as int
+        
         if(r.component_part_number != null && r.component_part_number != ""){
           sql.execute("INSERT INTO DEMAND(part_number,quantity,status,due_date) VALUES('${r.component_part_number}',${(r.component_part_quantity as int) * qte},'Open','${(date - 1).format(pattern)}') ".toString())
         }
@@ -163,7 +166,7 @@ def pns = parts.rows()*.part_number
 def mrps = [:]
 int i = 0
 boolean redo = false
-while(i<pns.size()-1){
+while(i<pns.size()){
     def res = null
     (res,redo) = mrp(pns[i],sql)
     mrps[pns[i]] = res
@@ -173,7 +176,7 @@ while(i<pns.size()-1){
 
 /**
  * Execution du mrp et affichage du resultat final :
- * Doing Material Requirement Plan : 
+Doing Material Requirement Plan : 
         MRP results for PN # A1 : 
                 Date :                  Qty :           Total qty :
                 2023-01-09              5               5
@@ -195,7 +198,9 @@ while(i<pns.size()-1){
                 2023-01-10              -5              0
         MRP results for PN # M2 :
                 Date :                  Qty :           Total qty :
-    done.
+                2023-01-05              5               5
+                2023-01-06              -5              0
+done.
  */
 pns.each{
     println "\tMRP results for PN # $it : "
@@ -209,7 +214,7 @@ println "done."
 
 /**
  * Affichage du planning des workcenters :
- * Reviewing operations by workcenter : 
+ Reviewing operations by workcenter :
         Workcenter # INSTALL_WC1 with a capacity of 8 per day and a setupTime of 2 per operation :
                 Operations list :
                         Oper.   Status  PN      Qty     Charge  Start Date                      Due Date                        Planed_date                     Delta   Estimated charge per Day
@@ -220,13 +225,13 @@ println "done."
                 Operations list :
                         Oper.   Status  PN      Qty     Charge  Start Date                      Due Date                        Planed_date                     Delta   Estimated charge per Day
                 Total charge per day : 0        Status (<= capa of 12?): OK
-        Workcenter # MAKE_WC1 with a capacity of 4 per day and a setupTime of 1 per operation :
+        Workcenter # MAKE_WC1 with a capacity of 15 per day and a setupTime of 2 per operation :
                 Operations list :
                         Oper.   Status  PN      Qty     Charge  Start Date                      Due Date                        Planed_date                     Delta   Estimated charge per Day
-                        3       Open    M1      7       36      2023-01-01                      2023-01-07                      2023-01-07                      0       6
-                        4       Open    M1      5       26      2023-01-01                      2023-01-09                      2023-01-09                      0       4
-                Total charge per day : 10       Status (<= capa of 4?): NOT POSSIBLE
-                
+                        5       Open    M2      5       27      2023-01-01                      2023-01-05                      2023-01-05                      0       7
+                        3       Open    M1      7       37      2023-01-01                      2023-01-07                      2023-01-07                      0       7
+                        4       Open    M1      5       27      2023-01-01                      2023-01-09                      2023-01-09                      0       4
+                Total charge per day : 18       Status (<= capa of 15?): NOT POSSIBLE
  * La planification affichee n est pas realisable. Il faut regrouper les operations et afficher une planed_date realiste afin de minimiser le retard et de l estimer de facon realiste toujours :
  */
 println "Reviewing operations by workcenter : "
